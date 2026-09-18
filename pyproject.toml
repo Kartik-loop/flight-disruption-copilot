@@ -1,0 +1,75 @@
+[project]
+name = "flight-disruption-copilot"
+version = "0.1.0"
+description = "A multi-agent system that helps air passengers understand their compensation rights under EU261 and US DOT rules."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+
+# ── Core dependencies ────────────────────────────────────────────────────
+# These are always installed. We keep the list tight: only what the rules
+# engine, schemas, and basic config need.
+dependencies = [
+    "pydantic>=2.0,<3.0",          # Data validation & schemas
+    "pydantic-settings>=2.0,<3.0", # Settings from env vars / .env files
+    "python-dotenv>=1.0,<2.0",     # Load .env files
+]
+
+# ── Optional dependency groups ───────────────────────────────────────────
+# Install with: uv pip install -e ".[ml]" or uv pip install -e ".[all]"
+# LEARN: Splitting deps into groups keeps install fast for people who only
+# want to study one part (e.g., the rules engine doesn't need LangGraph).
+[project.optional-dependencies]
+ml = [
+    "pandas>=2.0,<3.0",
+    "scikit-learn>=1.3,<2.0",
+    "lightgbm>=4.0,<5.0",
+    "joblib>=1.3,<2.0",
+    "matplotlib>=3.7,<4.0",        # For evaluation plots
+]
+agents = [
+    "langgraph>=0.4,<1.0",
+    "langchain>=0.3,<1.0",
+    "langchain-openai>=0.3,<1.0",  # Default LLM provider
+    "langchain-google-genai>=2.0,<3.0",  # Alternative: Gemini
+]
+api = [
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.27,<1.0",
+]
+ui = [
+    "streamlit>=1.30,<2.0",
+]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.23,<1.0",
+    "httpx>=0.27,<1.0",            # For testing FastAPI with TestClient
+    "ruff>=0.4,<1.0",              # Linting
+]
+# Install everything:
+all = [
+    "flight-disruption-copilot[ml,agents,api,ui,dev]",
+]
+
+# ── Build system ─────────────────────────────────────────────────────────
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# LEARN: Hatchling (the build backend) needs to know where to find our
+# Python package. Because we use a `src/` layout and our package is called
+# `copilot` (not `flight_disruption_copilot`), we must tell it explicitly.
+[tool.hatch.build.targets.wheel]
+packages = ["src/copilot"]
+
+# ── Tool configs ─────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+src = ["src"]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
