@@ -136,11 +136,12 @@ flight-disruption-copilot/
 This project is built incrementally:
 
 1. ✅ **Scaffold** — Project structure, config, schemas, README
-2. 🔲 **Rules engine** — Deterministic EU261/DOT rules with unit tests
+2. ✅ **Rules engine** — Deterministic EU261/DOT rules with unit tests
 3. 🔲 **ML model** — Delay prediction model training and evaluation
 4. 🔲 **Agents** — LangGraph multi-agent workflow
 5. 🔲 **API + UI** — FastAPI endpoints and Streamlit demo
 6. 🔲 **Integration** — End-to-end tests and final polish
+
 
 ## License
 

@@ -27,8 +27,8 @@ questions before moving on. Answers are in collapsible sections.
 
 5. **Optional dependency groups** — `pyproject.toml` splits dependencies into
    groups (`ml`, `agents`, `api`, `ui`, `dev`). You can install only what you
-   need for the part you're studying: `uv pip install -e ".[rules]"` for just
-   the rules engine, or `".[all]"` for everything.
+   need for the part you're studying: `uv pip install -e ".[dev]"` for development
+   tools, or `uv pip install -e ".[all]"` for everything.
 
 ### Files to read (in order)
 
@@ -67,9 +67,92 @@ a passenger might not know why their flight was disrupted.
 <details>
 <summary><strong>Q3: Why does <code>CompensationResult</code> use <code>default_factory=list</code> instead of <code>default=[]</code>?</strong></summary>
 
-**A:** In Python, default mutable arguments are shared across all instances.
-If we wrote `default=[]`, every `CompensationResult` would share the SAME list,
-so appending to one would affect all others. `default_factory=list` creates a
-**new** empty list for each instance. This is a classic Python gotcha that
-Pydantic helps you avoid (it actually warns about mutable defaults).
+**A:** Pydantic deep-copies mutable defaults per instance, so `default=[]` would
+not actually be shared across instances, and Pydantic does not warn about it.
+However, using `default_factory=list` is good practice for two reasons:
+(1) **Explicitness** — it clearly signals that a fresh container is generated for
+each instance, avoiding ambiguity for developers accustomed to standard Python's
+mutable default trap; and (2) **Fresh computed values** — `default_factory` supports
+callables (e.g., `list`, `dict`, `datetime.now`, `uuid4`) to compute fresh default
 </details>
+
+---
+
+## Phase 2: Deterministic EU261 / US DOT Rules Engine
+
+### Key concepts introduced
+
+1. **Deterministic rules vs. LLM guesswork** — Laws are deterministic algorithms with
+   statutory thresholds (e.g. €250 for flights $\le$ 1,500 km delayed $\ge$ 3 hours). If an
+   LLM calculates compensation, it suffers from hallucinations, numerical rounding bugs,
+   and unpredictable responses. We keep legal rules in pure, unit-tested Python functions.
+   The LLM is strictly used for text understanding (Phase 4) and explanation.
+
+2. **Great-Circle Distance via Haversine (EU261 Art. 7(4))** — Compensation tiers depend on
+   spherical distance between airports. The CJEU held in *Bossen v Brussels Airlines*
+   (Case C-559/16) that distance is measured strictly between the initial departure
+   and final destination using the great-circle method, regardless of connecting legs flown.
+
+3. **The Fundamental US vs. EU Regulatory Divergence** —
+   - **Europe (Regulation EC 261/2004 & CJEU Sturgeon)**: Provides statutory fixed cash
+     compensation (€250, €400, or €600) for delays of 3+ hours unless extraordinary
+     circumstances apply.
+   - **United States (14 CFR Part 250 & 260)**: There is **NO federal statutory cash
+     compensation for delays**. Federal law only mandates involuntary denied boarding
+     compensation (up to $2,150) and full prompt refunds if a passenger declines travel
+     after a "significant delay" (3+ hours domestic, 6+ hours international).
+
+4. **"Extraordinary Circumstances" (EU261 Art. 5(3))** — Under the CJEU *Wallentin-Hermann*
+   test (Case C-549/07), an event exempts the airline only if it is (a) not inherent in the
+   normal exercise of the activity, and (b) beyond the carrier's actual control. Technical
+   malfunctions, engine part wear, and crew shortages are inherent operational risks and
+   **do NOT** exempt airlines from compensation. Severe weather, ATC ground stops, and
+   bird strikes **do** qualify.
+
+5. **The Router Pattern for Jurisdiction** — `engine.py` inspects airport coordinates and
+   airline registration to automatically dispatch claims to the most protective statute.
+   For example, a US airline departing Paris for New York is bound by EU261 because it
+   departed from an EU airport (Art. 3(1)(a)).
+
+### Files to read (in order)
+
+1. [`src/copilot/rules/airports.py`](src/copilot/rules/airports.py) — Airport geodata & Haversine formula
+2. [`src/copilot/rules/eu261.py`](src/copilot/rules/eu261.py) — European Regulation EC 261/2004 engine
+3. [`src/copilot/rules/dot.py`](src/copilot/rules/dot.py) — US DOT (14 CFR 250 & 260) engine
+4. [`src/copilot/rules/engine.py`](src/copilot/rules/engine.py) — Jurisdiction router
+5. [`tests/test_airports.py`](tests/test_airports.py) — Distance & geodata tests
+6. [`tests/test_eu261.py`](tests/test_eu261.py) — EU261 unit test suite
+7. [`tests/test_dot.py`](tests/test_dot.py) — US DOT unit test suite
+8. [`tests/test_engine.py`](tests/test_engine.py) — Router tests
+
+### Self-check questions
+
+<details>
+<summary><strong>Q1: Why should an LLM never calculate EU261 compensation amounts directly?</strong></summary>
+
+**A:** Legal rules are deterministic conditional algorithms, not probabilistic text tasks.
+An LLM can hallucinate numbers, invent exceptions, miscalculate distances, or fail to apply
+statutory caps (such as the intra-EU €400 cap or 50% reduction clause). By implementing the
+rules in pure Python, we guarantee 100% reproducible, auditable, and unit-tested decisions.
+</details>
+
+<details>
+<summary><strong>Q2: If a flight from Paris (CDG) to Réunion Island (RUN, ~9,360 km) is delayed by 5 hours due to a technical breakdown, why is compensation €400 and not €600?</strong></summary>
+
+**A:** Two reasons:
+(1) **Article 7(1)(b) Intra-EU Cap**: Réunion is an EU Outermost Region (France). Article 7(1)(b)
+explicitly mandates €400 for **all intra-Community flights exceeding 1,500 km**, regardless
+of total distance. The €600 tier in Article 7(1)(c) only applies to extra-Community (non-intra-EU) flights.
+(2) **Technical breakdown liability**: Under CJEU Case C-549/07 (*Wallentin-Hermann*), technical
+defects are inherent in airline operations and do not qualify as extraordinary circumstances.
+</details>
+
+<details>
+<summary><strong>Q3: If a flight from New York to Los Angeles is delayed by 6 hours, does the passenger get statutory cash compensation under US DOT rules?</strong></summary>
+
+**A:** **No.** United States federal law has no statutory fixed monetary compensation for delays.
+Under the April 2024 DOT Final Rule (14 CFR Part 260), a 6-hour delay qualifies as a "significant delay"
+(3+ hours domestic), which entitles the passenger to a **100% prompt refund** of their ticket if they
+choose not to travel. But if the passenger takes the flight, federal law awards $0 in cash compensation.
+</details>
+

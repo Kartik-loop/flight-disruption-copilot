@@ -12,9 +12,15 @@ LEARN: This is a critical architectural decision. We separate the system into:
 The LLM is good at (1) but unreliable at (2). By putting rules in plain Python
 with unit tests, we get auditable, reproducible results. The LLM's job is
 to feed clean data INTO the rules engine and explain the results OUT.
-
-This package contains:
-  - eu261.py: European regulation EC 261/2004
-  - dot.py: US Department of Transportation rules
-  - engine.py: Router that picks the right rules based on region
 """
+
+from copilot.rules.dot import evaluate_dot
+from copilot.rules.engine import determine_applicable_region, evaluate_disruption_rules
+from copilot.rules.eu261 import evaluate_eu261
+
+__all__ = [
+    "evaluate_disruption_rules",
+    "evaluate_eu261",
+    "evaluate_dot",
+    "determine_applicable_region",
+]

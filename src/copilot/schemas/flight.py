@@ -205,9 +205,9 @@ class CompensationResult(BaseModel):
                     "extraordinary circumstances (which would exempt them).",
     )
 
-    # LEARN: default_factory=list creates a NEW empty list for each instance.
-    # If we wrote default=[], all instances would share the SAME list object,
-    # leading to subtle mutation bugs. This is a classic Python gotcha.
+    # LEARN: Pydantic deep-copies default=[], so mutable defaults are not shared
+    # across instances. However, using default_factory=list is best practice for
+    # explicitness and for dynamic computed values.
 
 
 # ── Delay prediction ─────────────────────────────────────────────────────
