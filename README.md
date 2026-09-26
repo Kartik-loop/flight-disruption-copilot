@@ -51,7 +51,7 @@ rights when flights are delayed, cancelled, or they're denied boarding.
 
 ```bash
 # Clone the repo
-git clone <repo-url>
+git clone https://github.com/Kartik-loop/flight-disruption-copilot.git
 cd flight-disruption-copilot
 
 # Create a virtual environment and install dependencies
