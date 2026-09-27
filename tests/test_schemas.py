@@ -27,7 +27,6 @@ from copilot.schemas.flight import (
     Region,
 )
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────────
 # LEARN: pytest fixtures are reusable setup functions. Any test that takes
 # a parameter with the same name as a fixture automatically receives its

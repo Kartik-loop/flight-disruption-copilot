@@ -1,0 +1,12 @@
+{
+  "flight": {
+    "airline": "LH",
+    "flight_number": "LH1000",
+    "departure_airport": "FRA",
+    "arrival_airport": "CDG",
+    "flight_date": "2025-03-10"
+  },
+  "disruption_type": "delay",
+  "arrival_delay_minutes": 240,
+  "airline_reason": "Technical fault"
+}

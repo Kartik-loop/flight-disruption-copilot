@@ -31,7 +31,6 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # LEARN: We define the project root relative to this file's location.
 # __file__ is the path to this config.py file. Going up 3 parents:
 #   config.py → copilot/ → src/ → project_root/

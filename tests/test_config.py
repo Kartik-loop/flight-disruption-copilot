@@ -9,7 +9,7 @@ WHY:  If config loading is broken, nothing else works. Testing it ensures
 import os
 from unittest.mock import patch
 
-from copilot.config import Settings, LLMProvider, PROJECT_ROOT
+from copilot.config import PROJECT_ROOT, LLMProvider, Settings
 
 
 class TestSettings:

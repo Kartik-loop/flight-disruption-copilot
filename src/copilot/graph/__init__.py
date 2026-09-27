@@ -9,7 +9,8 @@ LEARN: LangGraph models agent workflows as directed graphs where:
   - Nodes are functions (agents) that transform the state
   - Edges define the flow between nodes
   - Conditional edges let you branch based on state values
-Think of it as a flowchart that Python executes, with LLM calls at each step.
+Think of it as a flowchart Python executes. Only free-text intake calls an LLM;
+the supervisor, rules, prediction tool, and factual drafting template are code.
 
 Implemented in Phase 4.
 """

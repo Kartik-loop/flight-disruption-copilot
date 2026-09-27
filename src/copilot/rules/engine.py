@@ -7,11 +7,11 @@ WHY:  Passengers often do not know which regulatory regime protects them.
       A flight from Paris to Chicago on American Airlines is governed by
       EU261 (departing EU), whereas Chicago to Paris on American is not (departing
       non-EU on a non-EU airline). The router inspects airport geography and
-      airline nationality to automatically apply the most protective rules.
+      airline nationality to select candidate regimes without ranking currencies.
 HOW:  1. Geographically analyzes departure and arrival airports.
       2. Checks EU261 eligibility (which generally provides superior cash remedies).
       3. Checks US DOT eligibility (for denied boarding or refund rights).
-      4. Synthesizes an auditable, deterministic determination.
+      4. Returns a primary result, or separate results via evaluate_all_regimes.
 
 LEARN: The router pattern separates "what rules exist" from "which rules apply".
 Each individual rule module (eu261.py, dot.py) only knows its own law.
@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Optional
 
 from copilot.rules.airports import is_eu_airport, is_us_airport
+from copilot.rules.checks import check_airports
 from copilot.rules.dot import evaluate_dot
 from copilot.rules.eu261 import evaluate_eu261
 from copilot.schemas.flight import (
@@ -35,12 +36,11 @@ from copilot.schemas.flight import (
 
 def determine_applicable_region(disruption: FlightDisruption) -> Region:
     """
-    Determine the primary applicable regulatory jurisdiction for a flight.
+    Select the primary candidate jurisdiction; evaluators verify scope and missing facts.
 
     Hierarchy:
-      1. If the flight falls within EU261 scope, EU takes precedence because
-         EU261 provides statutory cash compensation (up to €600) for delays
-         and cancellations, whereas US law does not.
+      1. Evaluate EU261 first for departures or potential covered arrivals.
+         Unknown inbound carrier nationality produces a question, not coverage.
       2. If not EU-eligible but involves the US (domestic or US departure),
          US DOT applies.
       3. Otherwise, Region.OTHER.
@@ -83,6 +83,8 @@ def evaluate_disruption_rules(
       and statutory citations.
     """
     region = preferred_region or determine_applicable_region(disruption)
+    if pending := check_airports(disruption, region):
+        return pending
 
     if region == Region.EU:
         return evaluate_eu261(disruption)
@@ -97,12 +99,30 @@ def evaluate_disruption_rules(
             compensation_amount=None,
             compensation_currency=None,
             reasoning=(
-                f"Flight from {dep} to {arr} falls outside both European Regulation (EC) No 261/2004 "
+                f"Flight from {dep} to {arr} is outside the implemented EU261 "
                 f"and United States Department of Transportation jurisdiction. "
-                f"Neither departure nor arrival connects to an EU or US airport. "
+                f"No implemented regime covers the supplied route and carrier facts. "
+                f"UK261 and other local regimes are not implemented. "
                 f"International carriage may be governed by the Montreal Convention 1999 "
                 f"or local civil aviation authority rules."
             ),
             applicable_rules=["Montreal Convention 1999 (General Aviation)"],
             extraordinary_circumstances=None,
         )
+
+
+def evaluate_all_regimes(disruption: FlightDisruption) -> list[CompensationResult]:
+    """Preserve separate EU and US remedies instead of losing one in the primary-region router.
+
+    LEARN: Refunds and cash awards answer different questions and cannot be added
+    together. Returning separate results lets the agent explain both without
+    inventing a currency conversion or promising double recovery.
+    """
+    primary = evaluate_disruption_rules(disruption)
+    results = [primary]
+    if primary.regulation != Region.US and (
+        is_us_airport(disruption.flight.departure_airport)
+        or is_us_airport(disruption.flight.arrival_airport)
+    ):
+        results.append(evaluate_dot(disruption))
+    return results

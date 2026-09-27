@@ -19,7 +19,9 @@ from copilot.schemas.flight import (
 )
 
 
-def make_disruption(dep: str, arr: str, dtype=DisruptionType.DELAY, mins=200, airline="LH", is_eu=None):
+def make_disruption(
+    dep: str, arr: str, dtype=DisruptionType.DELAY, mins=200, airline="LH", is_eu=None
+):
     return FlightDisruption(
         flight=FlightInfo(
             airline=airline,
@@ -30,6 +32,7 @@ def make_disruption(dep: str, arr: str, dtype=DisruptionType.DELAY, mins=200, ai
         disruption_type=dtype,
         arrival_delay_minutes=mins,
         is_eu_carrier=is_eu,
+        airline_reason="Technical fault",
     )
 
 

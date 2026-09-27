@@ -1,0 +1,17 @@
+{
+  "flight": {
+    "airline": "UA",
+    "flight_number": "UA100",
+    "departure_airport": "JFK",
+    "arrival_airport": "LAX",
+    "flight_date": "2025-03-10",
+    "scheduled_departure": "2025-03-10T09:30:00"
+  },
+  "disruption_type": "denied_boarding",
+  "volunteered_seat": false,
+  "denied_due_to_overbooking": true,
+  "met_checkin_requirements": true,
+  "was_rerouted": true,
+  "rerouting_arrival_delay_minutes": 150,
+  "one_way_fare_usd": 300
+}

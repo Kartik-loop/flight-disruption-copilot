@@ -6,10 +6,10 @@ WHY:  Distance calculation determines the EU261 compensation amount (€250, €
       Jurisdiction classification determines whether EU261 or DOT applies.
 """
 
+import pytest
+
 from copilot.rules.airports import (
     calculate_flight_distance_km,
-    get_airport,
-    haversine_distance_km,
     is_eu_airport,
     is_intra_eu_flight,
     is_us_airport,
@@ -41,7 +41,7 @@ def test_jurisdiction_checks():
     assert is_eu_airport("FRA") is True
     assert is_eu_airport("CDG") is True
     assert is_eu_airport("AMS") is True
-    assert is_eu_airport("LHR") is True  # UK parity
+    assert is_eu_airport("LHR") is False  # UK261 is a separate regime
     assert is_eu_airport("ZRH") is True  # Switzerland bilateral
 
     # US Hubs
@@ -63,9 +63,9 @@ def test_intra_eu_flight():
     assert is_intra_eu_flight("JFK", "LAX") is False
 
 
-def test_unlisted_airport_fallback():
-    """Unlisted airports should return a safe fallback distance and not crash."""
-    dist = calculate_flight_distance_km("XYZ", "ABC")
-    assert dist == 2000.0
+def test_unlisted_airport_does_not_invent_distance():
+    """Unknown geography cannot safely produce a compensation amount."""
+    with pytest.raises(ValueError, match="Missing airport coordinates"):
+        calculate_flight_distance_km("XYZ", "ABC")
     assert is_eu_airport("XYZ") is False
     assert is_us_airport("XYZ") is False

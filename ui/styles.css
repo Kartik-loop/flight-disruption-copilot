@@ -1,0 +1,110 @@
+/* # LEARN: A system stack uses the platform's own typography without a font download.
+   Native control fonts are targeted separately because they do not always inherit. */
+:root { --ink: #252b28; --muted: #65716b; --accent: #345f52; }
+html, body, [data-testid="stApp"], input, textarea, button, select,
+[data-testid="stMarkdownContainer"], [data-baseweb="select"], label {
+  font-family: -apple-system, "SF Pro", "Segoe UI", sans-serif !important;
+}
+[data-testid="stApp"] {
+  background: radial-gradient(ellipse at 95% 0%, #dce7df80, transparent 45%),
+              radial-gradient(ellipse at 0% 25%, #eee5d780, transparent 42%), #f5f5f2;
+  color: var(--ink);
+}
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stMainBlockContainer"] { max-width: 1010px; padding: 3rem 2.5rem 4rem; }
+.brand { display:flex; align-items:center; gap:12px; padding-bottom:48px;
+         font-size:14px; font-weight:600; letter-spacing:-.2px; }
+.brand-mark { width:35px; height:35px; display:grid; place-items:center; color:white;
+              background:var(--accent); border-radius:12px; box-shadow:0 4px 12px #345f5220; }
+.brand-note { margin-left:auto; color:var(--muted); font-size:11px; font-weight:500;
+              letter-spacing:1.6px; text-transform:uppercase; }
+.eyebrow { color:var(--accent); font-size:11px; font-weight:650; letter-spacing:2px;
+           text-transform:uppercase; margin-bottom:16px; }
+.hero h1 { font-size:clamp(38px, 6vw, 62px); line-height:1.06; font-weight:600;
+           letter-spacing:-2.8px; max-width:700px; margin:0; padding:0 0 22px; }
+.hero p { color:var(--muted); font-size:17px; line-height:1.6; max-width:610px;
+          margin:0 0 24px; }
+h2, h3 { letter-spacing:-.7px; font-weight:600 !important; }
+[data-testid="stCaptionContainer"] { color:#606b65; line-height:1.65; }
+/* # LEARN: A translucent surface and a fine border create depth without heavy shadows.
+   The opaque fallback stays readable when backdrop filtering is unsupported. */
+[data-testid="stForm"], .st-key-results {
+  background:#fffffff0; border:1px solid #ffffff; border-radius:25px;
+  padding:32px; box-shadow:0 2px 5px #273e3003, 0 18px 55px #273e3009;
+}
+@supports (backdrop-filter: blur(16px)) {
+  [data-testid="stForm"], .st-key-results {
+    background:#ffffffce; backdrop-filter:blur(16px);
+  }
+}
+[data-testid="stForm"] { margin-top:8px; }
+.section-label { font-size:11px; text-transform:uppercase; color:var(--muted);
+                 letter-spacing:1.8px; font-weight:650; margin:4px 0 8px; }
+[data-testid="stWidgetLabel"] p { font-size:12px; font-weight:550; color:#505e56; }
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {
+  border-radius:11px !important; background:#f3f4f1 !important;
+  border-color:#e2e6df !important; transition:border-color 250ms ease, box-shadow 250ms ease;
+}
+[data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {
+  border-color:#507363 !important; box-shadow:0 0 0 3px #345f5214;
+}
+input { min-height:44px; font-size:14px !important; }
+[data-testid="stExpander"] { border-radius:14px; border-color:#e4e7e0; background:#ffffff60; }
+[data-testid="stExpander"] summary { padding:16px; font-size:13px; }
+[data-testid="stRadio"] [role="radiogroup"] { gap:6px; background:#e8ebe5;
+  padding:5px; border-radius:13px; width:fit-content; }
+[data-testid="stRadio"] label { padding:7px 15px; border-radius:9px; margin:0; }
+[data-testid="stRadio"] label:has(input:checked) { background:#fff; box-shadow:0 2px 5px #273e3010; }
+[data-testid="stRadio"] label > div:first-child { display:none; }
+[data-testid="stRadio"] label:focus-within { outline:2px solid var(--accent); outline-offset:1px; }
+[data-testid="stRadio"] p { font-size:13px; }
+/* # LEARN: Transitions interpolate an interaction change; keyframes animate a new result.
+   Opacity and transforms avoid animating dimensions, which would push other controls around. */
+button { transition:background-color 250ms ease, box-shadow 250ms ease, transform 250ms ease !important; }
+[data-testid="stFormSubmitButton"] button {
+  background:var(--accent); color:#fff; border:1px solid var(--accent);
+  min-height:49px; border-radius:12px; padding:0 28px; box-shadow:0 5px 14px #345f521c;
+}
+[data-testid="stFormSubmitButton"] button:hover { background:#254d40; color:#fff;
+  border-color:#254d40; box-shadow:0 7px 18px #345f522b; }
+button:active { transform:scale(.98); }
+button:focus-visible { outline:2px solid var(--accent) !important; outline-offset:3px; }
+[data-testid="stButton"] button, [data-testid="stDownloadButton"] button {
+  border-color:#d7ded5; border-radius:11px; min-height:42px; color:var(--accent);
+}
+[data-testid="stAlert"] { border-radius:13px; border:1px solid #d9e1d8; }
+[data-testid="stAlert"][data-baseweb="notification"] { padding:15px 18px; }
+[data-testid="stAlert"] p { font-size:13px; line-height:1.6; }
+.st-key-results { margin-top:24px; animation:result-reveal 250ms ease both; }
+@keyframes result-reveal { from { opacity:0; transform:translateY(8px); }
+                          to { opacity:1; transform:translateY(0); } }
+[data-testid="stMetricValue"] { letter-spacing:-1px; font-size:36px; color:var(--accent); }
+.progress-card { border:1px solid #d9e1d8; background:#edf2ec; border-radius:16px;
+                 padding:20px 24px; margin-top:20px; color:#345346;
+                 animation:result-reveal 250ms ease both; }
+.progress-card strong { display:block; margin-bottom:6px; font-size:15px; }
+.progress-card p { margin:0; font-size:13px; line-height:1.6; }
+.footer { font-size:11px; color:var(--muted); letter-spacing:.3px; text-align:center;
+          padding:28px 0 0; }
+/* # LEARN: Motion is optional feedback, not information. Respecting the operating
+   system's reduced-motion preference preserves the full workflow without movement. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation:none !important; transition:none !important; }
+}
+@media (max-width:640px) {
+  [data-testid="stMainBlockContainer"] { padding:2rem 1rem 3rem; }
+  [data-testid="stForm"], .st-key-results { padding:20px; border-radius:19px; }
+  .brand { padding-bottom:32px; } .brand-note { display:none; }
+  .hero h1 { letter-spacing:-1.7px; } .hero p { font-size:15px; }
+}
+/* # NOTE: Streamlit owns widget markup. Scope overrides to named test IDs rather
+   than generated class names, and check these selectors when upgrading Streamlit. */
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) {
+  background:#e9efe6; color:#365744; border-radius:12px;
+}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {
+  background:#fff3da; color:#70511c; border-radius:12px;
+}
+[data-testid="stAlertContentInfo"] p { color:#365744; }
+[data-testid="stCaptionContainer"] p { color:#606b65 !important; }
+[data-testid="stRadio"] label > div:has(> input) { flex-shrink:0; }

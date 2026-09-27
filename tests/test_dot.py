@@ -20,25 +20,27 @@ from copilot.schemas.flight import (
     DisruptionType,
     FlightDisruption,
     FlightInfo,
-    Region,
 )
 
 
 @pytest.fixture
 def us_flight_info():
     """Helper to create minimal US domestic FlightInfo."""
+
     def _create(dep: str = "JFK", arr: str = "LAX", airline: str = "DL"):
         return FlightInfo(
             airline=airline,
             flight_number=f"{airline}405",
             departure_airport=dep,
             arrival_airport=arr,
-            flight_date=date(2024, 8, 15),
+            flight_date=date(2025, 8, 15),
         )
+
     return _create
 
 
 # ── Denied Boarding Tests (14 CFR Part 250) ────────────────────────────────
+
 
 def test_dot_denied_boarding_under_1_hour(us_flight_info):
     """Under 14 CFR § 250.5(a)(1), alternate arrival <= 1 hour requires $0 DBC."""
@@ -46,8 +48,12 @@ def test_dot_denied_boarding_under_1_hour(us_flight_info):
     disruption = FlightDisruption(
         flight=flight,
         disruption_type=DisruptionType.DENIED_BOARDING,
-        arrival_delay_minutes=45,  # <= 1 hour
+        rerouting_arrival_delay_minutes=45,  # <= 1 hour
         volunteered_seat=False,
+        denied_due_to_overbooking=True,
+        met_checkin_requirements=True,
+        was_rerouted=True,
+        one_way_fare_usd=250,
     )
     result = evaluate_dot(disruption)
     assert result.eligible is False
@@ -61,8 +67,12 @@ def test_dot_denied_boarding_1_to_2_hours(us_flight_info):
     disruption = FlightDisruption(
         flight=flight,
         disruption_type=DisruptionType.DENIED_BOARDING,
-        arrival_delay_minutes=90,  # 1.5 hours
+        rerouting_arrival_delay_minutes=90,  # 1.5 hours
         volunteered_seat=False,
+        denied_due_to_overbooking=True,
+        met_checkin_requirements=True,
+        was_rerouted=True,
+        one_way_fare_usd=250,
     )
     result = evaluate_dot(disruption)
     assert result.eligible is True
@@ -78,8 +88,12 @@ def test_dot_denied_boarding_over_2_hours(us_flight_info):
     disruption = FlightDisruption(
         flight=flight,
         disruption_type=DisruptionType.DENIED_BOARDING,
-        arrival_delay_minutes=180,  # 3 hours
+        rerouting_arrival_delay_minutes=180,  # 3 hours
         volunteered_seat=False,
+        denied_due_to_overbooking=True,
+        met_checkin_requirements=True,
+        was_rerouted=True,
+        one_way_fare_usd=250,
     )
     result = evaluate_dot(disruption)
     assert result.eligible is True
@@ -104,6 +118,7 @@ def test_dot_voluntary_denied_boarding(us_flight_info):
 
 # ── Cancellation & Refund Tests (14 CFR Part 260) ──────────────────────────
 
+
 def test_dot_cancellation_gives_refund_not_cash_penalty(us_flight_info):
     """Cancellations in the US entitle passenger to full prompt refund, not cash compensation."""
     flight = us_flight_info("ATL", "DFW")
@@ -120,6 +135,7 @@ def test_dot_cancellation_gives_refund_not_cash_penalty(us_flight_info):
 
 
 # ── Flight Delays Under US Law ─────────────────────────────────────────────
+
 
 def test_dot_delay_no_fixed_cash_compensation(us_flight_info):
     """
@@ -151,4 +167,6 @@ def test_dot_minor_delay(us_flight_info):
     )
     result = evaluate_dot(disruption)
     assert result.eligible is False
-    assert "less than 3 hours" in result.reasoning.lower() or "not qualify" in result.reasoning.lower()
+    assert (
+        "less than 3 hours" in result.reasoning.lower() or "not qualify" in result.reasoning.lower()
+    )

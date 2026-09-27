@@ -20,9 +20,14 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+DISCLAIMER = (
+    "This is not legal advice. This learning tool provides informational estimates only; "
+    "exceptions may affect your case. Consult the relevant enforcement body for guidance."
+)
 
 
 # ── Enumerations ─────────────────────────────────────────────────────────
@@ -31,8 +36,10 @@ from pydantic import BaseModel, Field
 # doesn't handle. When the intake agent outputs a DisruptionType, it MUST be
 # one of these three values, or Pydantic rejects it.
 
+
 class DisruptionType(str, Enum):
     """The three categories of disruption covered by EU261 and DOT rules."""
+
     DELAY = "delay"
     CANCELLATION = "cancellation"
     DENIED_BOARDING = "denied_boarding"
@@ -48,12 +55,14 @@ class Region(str, Enum):
     compensation, but do NOT mandate compensation for delays alone.
     We need to know which regime to apply before checking eligibility.
     """
+
     EU = "eu"
     US = "us"
     OTHER = "other"  # Neither regime applies
 
 
 # ── Core flight data ─────────────────────────────────────────────────────
+
 
 class FlightInfo(BaseModel):
     """
@@ -94,6 +103,23 @@ class FlightInfo(BaseModel):
         ..., description="Date of the flight (used when exact times are unknown)."
     )
 
+    @field_validator("departure_airport", "arrival_airport")
+    @classmethod
+    def normalize_airport(cls, value: str) -> str:
+        """Reject malformed codes before geographic routing can silently misclassify them."""
+        value = value.strip().upper()
+        if len(value) != 3 or not value.isascii() or not value.isalpha():
+            raise ValueError("Use a three-letter IATA airport code.")
+        return value
+
+    @field_validator("airline")
+    @classmethod
+    def nonempty_airline(cls, value: str) -> str:
+        """Keep an empty carrier name from masquerading as a completed intake."""
+        if not value.strip():
+            raise ValueError("Airline is required.")
+        return value.strip()
+
     # LEARN: Field(...) with ... means "required" — Pydantic will reject
     # construction if this field is missing. Field(None) means "optional,
     # defaults to None". We make airport codes required but exact times
@@ -113,12 +139,8 @@ class FlightDisruption(BaseModel):
     about what happened live here.
     """
 
-    flight: FlightInfo = Field(
-        ..., description="Details of the disrupted flight."
-    )
-    disruption_type: DisruptionType = Field(
-        ..., description="What kind of disruption occurred."
-    )
+    flight: FlightInfo = Field(..., description="Details of the disrupted flight.")
+    disruption_type: DisruptionType = Field(..., description="What kind of disruption occurred.")
     arrival_delay_minutes: Optional[int] = Field(
         None,
         description="Delay at final destination in minutes. None if unknown.",
@@ -127,7 +149,7 @@ class FlightDisruption(BaseModel):
     cancellation_notice_days: Optional[int] = Field(
         None,
         description="How many days before departure the cancellation was announced. "
-                    "None if not a cancellation or if unknown.",
+        "None if not a cancellation or if unknown.",
         ge=0,
     )
     was_rerouted: Optional[bool] = Field(
@@ -137,7 +159,7 @@ class FlightDisruption(BaseModel):
     airline_reason: Optional[str] = Field(
         None,
         description="The reason the airline gave for the disruption (free text). "
-                    "Used to check for 'extraordinary circumstances' under EU261.",
+        "Used to check for 'extraordinary circumstances' under EU261.",
         examples=["Air traffic control strike", "Technical fault", "Bad weather"],
     )
     passenger_description: Optional[str] = Field(
@@ -147,12 +169,38 @@ class FlightDisruption(BaseModel):
     is_eu_carrier: Optional[bool] = Field(
         None,
         description="Whether the airline is registered in the EU/EEA. "
-                    "Relevant for EU261 scope on flights arriving in the EU.",
+        "Relevant for EU261 scope on flights arriving in the EU.",
     )
     volunteered_seat: Optional[bool] = Field(
         None,
         description="For denied boarding: did the passenger volunteer? "
-                    "Voluntary bumping has different rules than involuntary.",
+        "Voluntary bumping has different rules than involuntary.",
+    )
+    one_way_fare_usd: Optional[float] = Field(
+        None,
+        gt=0,
+        allow_inf_nan=False,
+        description="Actual one-way fare in USD; never assume a sample fare.",
+    )
+    declined_alternative_travel: Optional[bool] = Field(
+        None,
+        description="Passenger declined travel and vouchers/credits after the disruption.",
+    )
+    met_checkin_requirements: Optional[bool] = Field(
+        None,
+        description="Confirmed reservation, valid documents, and timely check-in/boarding.",
+    )
+    denied_due_to_overbooking: Optional[bool] = Field(
+        None,
+        description="Whether denied boarding was specifically due to an oversold flight.",
+    )
+    rerouting_departure_advance_minutes: Optional[int] = Field(
+        None,
+        description="Minutes the offered flight departs BEFORE original departure; signed.",
+    )
+    rerouting_arrival_delay_minutes: Optional[int] = Field(
+        None,
+        description="Offered alternative's scheduled arrival minus original arrival; signed.",
     )
 
     # NOTE: We don't store the passenger's personal info (name, email, booking ref)
@@ -162,6 +210,7 @@ class FlightDisruption(BaseModel):
 
 
 # ── Eligibility result ───────────────────────────────────────────────────
+
 
 class CompensationResult(BaseModel):
     """
@@ -178,8 +227,14 @@ class CompensationResult(BaseModel):
     output, we couldn't write deterministic tests.
     """
 
-    eligible: bool = Field(
-        ..., description="Whether the passenger is entitled to compensation."
+    eligible: Optional[bool] = Field(
+        ..., description="Cash compensation assessment; None means not yet determined."
+    )
+    missing_information: list[str] = Field(default_factory=list)
+    review_required: bool = False
+    refund_eligible: Optional[bool] = Field(
+        None,
+        description="Separate refund assessment, not a cash compensation award.",
     )
     regulation: Optional[Region] = Field(
         None, description="Which regulation applies (EU261 or US DOT)."
@@ -193,7 +248,7 @@ class CompensationResult(BaseModel):
     reasoning: str = Field(
         ...,
         description="Step-by-step explanation of how the determination was made. "
-                    "References specific regulation articles.",
+        "References specific regulation articles.",
     )
     applicable_rules: list[str] = Field(
         default_factory=list,
@@ -201,8 +256,8 @@ class CompensationResult(BaseModel):
     )
     extraordinary_circumstances: Optional[bool] = Field(
         None,
-        description="EU261 only: whether the airline's reason qualifies as "
-                    "extraordinary circumstances (which would exempt them).",
+        description="EU261 only: whether the stated reason suggests an external event. "
+        "This is not proof of a legal exemption; review_required records uncertainty.",
     )
 
     # LEARN: Pydantic deep-copies default=[], so mutable defaults are not shared
@@ -211,6 +266,7 @@ class CompensationResult(BaseModel):
 
 
 # ── Delay prediction ─────────────────────────────────────────────────────
+
 
 class DelayPrediction(BaseModel):
     """
@@ -235,12 +291,16 @@ class DelayPrediction(BaseModel):
         default_factory=dict,
         description="Key features and their values that drove the prediction.",
     )
+    data_source: Literal["bts", "synthetic", "unknown"] = "unknown"
+    limitations: list[str] = Field(default_factory=list)
+    disclaimer: str = DISCLAIMER
 
     # NOTE: We intentionally keep this simple. A production system might
     # include SHAP values for each feature, confidence intervals, etc.
 
 
 # ── Full agent response ──────────────────────────────────────────────────
+
 
 class CopilotResponse(BaseModel):
     """
@@ -250,26 +310,24 @@ class CopilotResponse(BaseModel):
     determination, delay prediction (if requested), and the claim letter.
     """
 
-    disruption: FlightDisruption = Field(
-        ..., description="Validated structured disruption information."
+    disruption: Optional[FlightDisruption] = Field(
+        None, description="Validated facts; absent if intake needs more information."
     )
+    status: Literal["complete", "needs_information", "review_required", "error"] = "complete"
+    collected_facts: dict[str, Any] = Field(default_factory=dict)
+    questions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    additional_assessments: list[CompensationResult] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
     eligibility: Optional[CompensationResult] = Field(
         None, description="Compensation eligibility determination."
     )
     delay_prediction: Optional[DelayPrediction] = Field(
         None, description="Delay probability prediction, if available."
     )
-    claim_letter: Optional[str] = Field(
-        None, description="Draft claim letter text."
-    )
+    claim_letter: Optional[str] = Field(None, description="Draft claim letter text.")
     disclaimer: str = Field(
-        default=(
-            "⚠️ DISCLAIMER: This analysis is for informational purposes only "
-            "and does not constitute legal advice. Compensation rules have "
-            "exceptions and nuances that may affect your specific case. "
-            "Consult a legal professional or your national enforcement body "
-            "for authoritative guidance."
-        ),
+        default=DISCLAIMER,
         description="Legal disclaimer — always included in every response.",
     )
 

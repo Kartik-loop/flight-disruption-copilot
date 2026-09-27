@@ -3,8 +3,7 @@ tests/test_eu261.py — Comprehensive unit tests for EU Regulation (EC) No 261/2
 
 WHAT: Tests all statutory rules, distance bands, delay thresholds, cancellation notice periods,
       extraordinary circumstances exemptions, and territorial scope conditions.
-WHY:  Verifies that the legal engine is 100% deterministic and compliant with official
-      regulations and CJEU case law.
+WHY:  Verify deterministic behavior for implemented cases; these tests are not a legal audit.
 """
 
 from datetime import date
@@ -12,20 +11,19 @@ from datetime import date
 import pytest
 
 from copilot.rules.eu261 import (
-    classify_extraordinary_circumstances,
     evaluate_eu261,
 )
 from copilot.schemas.flight import (
     DisruptionType,
     FlightDisruption,
     FlightInfo,
-    Region,
 )
 
 
 @pytest.fixture
 def base_flight_info():
     """Helper to create minimal FlightInfo for tests."""
+
     def _create(dep: str, arr: str, airline: str = "LH"):
         return FlightInfo(
             airline=airline,
@@ -34,10 +32,12 @@ def base_flight_info():
             arrival_airport=arr,
             flight_date=date(2024, 8, 1),
         )
+
     return _create
 
 
 # ── Distance Band & Amount Tests ──────────────────────────────────────────
+
 
 def test_short_haul_delay_threshold(base_flight_info):
     """
@@ -50,6 +50,7 @@ def test_short_haul_delay_threshold(base_flight_info):
     # Delay under 3 hours -> Not eligible
     disruption_under_3h = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=170,
     )
@@ -61,6 +62,7 @@ def test_short_haul_delay_threshold(base_flight_info):
     # Delay of exactly 3 hours (180 mins) -> €250
     disruption_3h = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=180,
     )
@@ -79,6 +81,7 @@ def test_medium_haul_delay(base_flight_info):
     flight = base_flight_info("MAD", "WAW")
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=240,
     )
@@ -92,7 +95,7 @@ def test_medium_haul_delay(base_flight_info):
 def test_long_haul_delay_and_50_percent_reduction(base_flight_info):
     """
     Flight > 3,500 km extra-EU (CDG to JFK, ~5,835 km):
-      - Delay 3 to 4 hours (e.g. 210 mins): €300 (50% reduction under Art. 7(2)(c) & Sturgeon para 63).
+      - Delay 3 to 4 hours: €300 (50% reduction under Art. 7(2)(c) & Sturgeon para 63).
       - Delay >= 4 hours (e.g. 270 mins): Full €600 (Art. 7(1)(c)).
     """
     flight = base_flight_info("CDG", "JFK")
@@ -100,6 +103,7 @@ def test_long_haul_delay_and_50_percent_reduction(base_flight_info):
     # Delay between 3h and 4h (3.5 hours) -> €300
     disruption_3_5h = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=210,
     )
@@ -111,6 +115,7 @@ def test_long_haul_delay_and_50_percent_reduction(base_flight_info):
     # Delay >= 4 hours -> €600
     disruption_4_5h = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=270,
     )
@@ -122,8 +127,9 @@ def test_long_haul_delay_and_50_percent_reduction(base_flight_info):
 
 # ── Extraordinary Circumstances Tests ─────────────────────────────────────
 
-def test_extraordinary_circumstances_weather_exempts(base_flight_info):
-    """Severe weather / storm is an extraordinary circumstance under Art. 5(3)."""
+
+def test_weather_claim_requires_evidence(base_flight_info):
+    """An airline weather claim is not itself proof of an Article 5(3) exemption."""
     flight = base_flight_info("FRA", "LHR")
     disruption = FlightDisruption(
         flight=flight,
@@ -132,7 +138,8 @@ def test_extraordinary_circumstances_weather_exempts(base_flight_info):
         airline_reason="Severe thunderstorm and airport closure",
     )
     result = evaluate_eu261(disruption)
-    assert result.eligible is False
+    assert result.eligible is None
+    assert result.review_required is True
     assert result.extraordinary_circumstances is True
     assert "Article 5(3)" in result.reasoning
 
@@ -172,11 +179,13 @@ def test_crew_staffing_is_not_extraordinary(base_flight_info):
 
 # ── Cancellation Tests ────────────────────────────────────────────────────
 
+
 def test_cancellation_14_days_notice_no_compensation(base_flight_info):
     """Cancellation announced >= 14 days in advance requires no compensation (Art. 5(1)(c)(i))."""
     flight = base_flight_info("AMS", "BCN")
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.CANCELLATION,
         cancellation_notice_days=15,
     )
@@ -191,8 +200,10 @@ def test_cancellation_short_notice_eligible(base_flight_info):
     flight = base_flight_info("AMS", "BCN")  # ~1240 km -> €250
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.CANCELLATION,
         cancellation_notice_days=2,
+        was_rerouted=False,
     )
     result = evaluate_eu261(disruption)
     assert result.eligible is True
@@ -201,13 +212,18 @@ def test_cancellation_short_notice_eligible(base_flight_info):
 
 # ── Denied Boarding Tests ─────────────────────────────────────────────────
 
+
 def test_involuntary_denied_boarding(base_flight_info):
     """Involuntary denied boarding triggers immediate Art. 7 compensation."""
     flight = base_flight_info("FRA", "JFK")  # Long haul -> €600
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DENIED_BOARDING,
         volunteered_seat=False,
+        met_checkin_requirements=True,
+        denied_due_to_overbooking=True,
+        was_rerouted=False,
     )
     result = evaluate_eu261(disruption)
     assert result.eligible is True
@@ -220,6 +236,7 @@ def test_voluntary_denied_boarding(base_flight_info):
     flight = base_flight_info("FRA", "JFK")
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DENIED_BOARDING,
         volunteered_seat=True,
     )
@@ -231,11 +248,13 @@ def test_voluntary_denied_boarding(base_flight_info):
 
 # ── Scope Tests (Article 3) ───────────────────────────────────────────────
 
+
 def test_scope_departure_from_eu_any_carrier(base_flight_info):
     """Non-EU airline departing EU is covered under Art. 3(1)(a)."""
     flight = base_flight_info("CDG", "JFK", airline="UA")  # United departing Paris
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=250,
         is_eu_carrier=False,
@@ -250,13 +269,17 @@ def test_scope_inbound_to_eu_non_eu_carrier_excluded(base_flight_info):
     flight = base_flight_info("JFK", "CDG", airline="UA")  # United departing NY
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=300,
         is_eu_carrier=False,
     )
     result = evaluate_eu261(disruption)
     assert result.eligible is False
-    assert "third-country carriers" in result.reasoning.lower() or "not apply" in result.reasoning.lower()
+    assert (
+        "third-country carriers" in result.reasoning.lower()
+        or "not apply" in result.reasoning.lower()
+    )
 
 
 def test_scope_inbound_to_eu_community_carrier_included(base_flight_info):
@@ -264,6 +287,7 @@ def test_scope_inbound_to_eu_community_carrier_included(base_flight_info):
     flight = base_flight_info("JFK", "CDG", airline="AF")  # Air France departing NY
     disruption = FlightDisruption(
         flight=flight,
+        airline_reason="Technical fault",
         disruption_type=DisruptionType.DELAY,
         arrival_delay_minutes=300,
         is_eu_carrier=True,

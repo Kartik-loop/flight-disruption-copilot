@@ -1,0 +1,114 @@
+{
+  "model_type": "LightGBM",
+  "trained_at": "2026-09-27T12:08:30.860312+00:00",
+  "data_source": "bts",
+  "source": "real",
+  "data_manifest": {
+    "data_source": "bts",
+    "synthetic": false,
+    "fallback_reason": null,
+    "year": 2025,
+    "months": [
+      1,
+      2,
+      3
+    ],
+    "seed": 42,
+    "rows_per_month": 20000,
+    "rows": 60000,
+    "created_at": "2026-09-27T12:07:06.971363+00:00",
+    "sha256": "858aaa7357e8d629a5df7b16764d63f054450eadc8980f8a1865ebf32c5d77a9",
+    "archives": [
+      {
+        "url": "https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_2025_1.zip",
+        "sha256": "868387dcedaef1b8d8392e608e642219fde50d594c3cf2094aec858167629ccf",
+        "raw_rows": 539747,
+        "usable_rows": 522269,
+        "sample_rows": 20000
+      },
+      {
+        "url": "https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_2025_2.zip",
+        "sha256": "12dc8dbdb3c8b3c20d4c00a8b188196ae202f781a8760871ae502a9c733d0ecd",
+        "raw_rows": 504884,
+        "usable_rows": 496476,
+        "sample_rows": 20000
+      },
+      {
+        "url": "https://transtats.bts.gov/PREZIP/On_Time_Reporting_Carrier_On_Time_Performance_1987_present_2025_3.zip",
+        "sha256": "9c80fbc2112cdbf3f0613ec2001ba019b3ad75511cd69657080736e7eda9cef4",
+        "raw_rows": 600872,
+        "usable_rows": 592301,
+        "sample_rows": 20000
+      }
+    ],
+    "population": "Completed, non-diverted US domestic reporting-carrier flights"
+  },
+  "data_sha256": "858aaa7357e8d629a5df7b16764d63f054450eadc8980f8a1865ebf32c5d77a9",
+  "features": [
+    "airline",
+    "origin",
+    "destination",
+    "scheduled_hour",
+    "day_of_week",
+    "month"
+  ],
+  "target": "arrival delay >= 15 minutes",
+  "decision_threshold": 0.5,
+  "seed": 42,
+  "split": {
+    "strategy": "last_calendar_month",
+    "train": {
+      "rows": 40000,
+      "start": "2025-01-01",
+      "end": "2025-02-28",
+      "delay_rate": 0.19655
+    },
+    "test": {
+      "rows": 20000,
+      "start": "2025-03-01",
+      "end": "2025-03-31",
+      "delay_rate": 0.19705
+    }
+  },
+  "metrics": {
+    "lightgbm": {
+      "accuracy": 0.8022,
+      "precision": 0.4358974358974359,
+      "recall": 0.012940877949758945,
+      "roc_auc": 0.6186940636104946
+    },
+    "always_on_time": {
+      "accuracy": 0.80295,
+      "precision": 0.0,
+      "recall": 0.0,
+      "roc_auc": 0.5
+    }
+  },
+  "exploration": {
+    "airlines": 14,
+    "routes": 5221,
+    "by_month": {
+      "2025-01": {
+        "rows": 20000,
+        "delay_rate": 0.18265
+      },
+      "2025-02": {
+        "rows": 20000,
+        "delay_rate": 0.21045
+      },
+      "2025-03": {
+        "rows": 20000,
+        "delay_rate": 0.19705
+      }
+    }
+  },
+  "versions": {
+    "pandas": "2.3.3",
+    "scikit-learn": "1.9.1",
+    "lightgbm": "4.7.0",
+    "numpy": "2.5.3",
+    "joblib": "1.6.0"
+  },
+  "disclaimer": "This is not legal advice. Delay predictions do not determine compensation rights.",
+  "model_sha256": "d69a052a4c3128d2111047c1b27a2c943910c75034d7f5eef3ad974722982d43"
+}

@@ -15,5 +15,8 @@ Key design decisions:
   - Only pre-departure features to avoid data leakage
   - Saved with joblib alongside metadata for reproducibility
 
-Implemented in Phase 3.
+Phase 3 implements data.py (download, cleaning, sampling, labelled fallback)
+and train.py (time-based evaluation, baseline, model and metadata persistence).
+Phase 4 adds predict.py: a guarded prediction tool with explicit synthetic-demo
+opt-in, provenance checks, and coverage checks for US domestic flight inputs.
 """

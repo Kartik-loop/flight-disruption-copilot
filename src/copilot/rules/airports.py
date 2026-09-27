@@ -22,26 +22,49 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-
 # ── Regulatory Jurisdiction Constants ─────────────────────────────────────
 # LEARN: EU Regulation (EC) No 261/2004 applies to:
 # 1. The 27 EU Member States.
 # 2. Outermost Regions (OMRs) under Art. 355 TFEU (e.g., Canary Islands, Guadeloupe, Azores).
 # 3. EEA countries (Norway, Iceland) via EEA Agreement Annex XIII.
 # 4. Switzerland via the EU-Swiss Air Transport Agreement.
-# 5. Note on UK: Since Brexit, the UK enacted "UK261" which mirrors EU261 in structure.
-#    For simplicity and passenger rights protection, we treat UK airports as covered
-#    under the European consumer framework.
+# NOTE: UK261 is a separate regime and is not implemented here. UK airports
+# are not EU departures; flights from the EU to the UK can still be in EU261 scope.
 
 EU_EEA_COUNTRIES = {
     # 27 EU Member States
-    "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI",
-    "FR", "GR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT",
-    "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CY",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "GR",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "MT",
+    "NL",
+    "PL",
+    "PT",
+    "RO",
+    "SE",
+    "SI",
+    "SK",
     # EEA & Bilateral Agreements
-    "IS", "NO", "LI", "CH",
-    # UK (UK261 parity)
-    "GB",
+    "IS",
+    "NO",
+    "LI",
+    "CH",
 }
 
 US_COUNTRY_CODE = "US"
@@ -50,6 +73,7 @@ US_COUNTRY_CODE = "US"
 @dataclass(frozen=True)
 class AirportLocation:
     """Geographical and political metadata for an airport."""
+
     iata: str
     name: str
     city: str
@@ -59,7 +83,7 @@ class AirportLocation:
 
     @property
     def is_eu_or_eea(self) -> bool:
-        """Return True if airport is in the EU/EEA, Switzerland, or UK."""
+        """Return True if airport is in the EU/EEA or Switzerland."""
         return self.country in EU_EEA_COUNTRIES
 
     @property
@@ -89,7 +113,9 @@ AIRPORTS: dict[str, AirportLocation] = {
     "MAN": AirportLocation("MAN", "Manchester Airport", "Manchester", "GB", 53.3537, -2.2750),
     "EDI": AirportLocation("EDI", "Edinburgh Airport", "Edinburgh", "GB", 55.9500, -3.3725),
     "MAD": AirportLocation("MAD", "Adolfo Suárez Madrid–Barajas", "Madrid", "ES", 40.4839, -3.5680),
-    "BCN": AirportLocation("BCN", "Josep Tarradellas Barcelona-El Prat", "Barcelona", "ES", 41.2974, 2.0833),
+    "BCN": AirportLocation(
+        "BCN", "Josep Tarradellas Barcelona-El Prat", "Barcelona", "ES", 41.2974, 2.0833
+    ),
     "AGP": AirportLocation("AGP", "Málaga-Costa del Sol", "Malaga", "ES", 36.6749, -4.4991),
     "LPA": AirportLocation("LPA", "Gran Canaria Airport", "Las Palmas", "ES", 27.9319, -15.3866),
     "TFS": AirportLocation("TFS", "Tenerife South Airport", "Tenerife", "ES", 28.0445, -16.5725),
@@ -107,62 +133,123 @@ AIRPORTS: dict[str, AirportLocation] = {
     "ARN": AirportLocation("ARN", "Stockholm Arlanda Airport", "Stockholm", "SE", 59.6498, 17.9238),
     "HEL": AirportLocation("HEL", "Helsinki-Vantaa Airport", "Helsinki", "FI", 60.3172, 24.9633),
     "WAW": AirportLocation("WAW", "Warsaw Chopin Airport", "Warsaw", "PL", 52.1672, 20.9679),
-    "KRK": AirportLocation("KRK", "Kraków John Paul II International", "Krakow", "PL", 50.0777, 19.7848),
+    "KRK": AirportLocation(
+        "KRK", "Kraków John Paul II International", "Krakow", "PL", 50.0777, 19.7848
+    ),
     "PRG": AirportLocation("PRG", "Václav Havel Airport Prague", "Prague", "CZ", 50.1008, 14.2600),
-    "BUD": AirportLocation("BUD", "Budapest Ferenc Liszt International", "Budapest", "HU", 47.4369, 19.2556),
+    "BUD": AirportLocation(
+        "BUD", "Budapest Ferenc Liszt International", "Budapest", "HU", 47.4369, 19.2556
+    ),
     "ATH": AirportLocation("ATH", "Athens International Airport", "Athens", "GR", 37.9364, 23.9445),
-    "OTP": AirportLocation("OTP", "Henri Coandă International Airport", "Bucharest", "RO", 44.5711, 26.0850),
+    "OTP": AirportLocation(
+        "OTP", "Henri Coandă International Airport", "Bucharest", "RO", 44.5711, 26.0850
+    ),
     "SOF": AirportLocation("SOF", "Sofia Airport", "Sofia", "BG", 42.6951, 23.4061),
-    "KEF": AirportLocation("KEF", "Keflavík International Airport", "Reykjavik", "IS", 63.9850, -22.6056),
-
+    "KEF": AirportLocation(
+        "KEF", "Keflavík International Airport", "Reykjavik", "IS", 63.9850, -22.6056
+    ),
     # US Hubs
-    "JFK": AirportLocation("JFK", "John F. Kennedy International", "New York", "US", 40.6413, -73.7781),
-    "EWR": AirportLocation("EWR", "Newark Liberty International", "Newark", "US", 40.6895, -74.1745),
+    "JFK": AirportLocation(
+        "JFK", "John F. Kennedy International", "New York", "US", 40.6413, -73.7781
+    ),
+    "EWR": AirportLocation(
+        "EWR", "Newark Liberty International", "Newark", "US", 40.6895, -74.1745
+    ),
     "LGA": AirportLocation("LGA", "LaGuardia Airport", "New York", "US", 40.7769, -73.8740),
-    "LAX": AirportLocation("LAX", "Los Angeles International", "Los Angeles", "US", 33.9416, -118.4085),
-    "ORD": AirportLocation("ORD", "O'Hare International Airport", "Chicago", "US", 41.9742, -87.9073),
-    "MDW": AirportLocation("MDW", "Chicago Midway International", "Chicago", "US", 41.7868, -87.7522),
+    "LAX": AirportLocation(
+        "LAX", "Los Angeles International", "Los Angeles", "US", 33.9416, -118.4085
+    ),
+    "ORD": AirportLocation(
+        "ORD", "O'Hare International Airport", "Chicago", "US", 41.9742, -87.9073
+    ),
+    "MDW": AirportLocation(
+        "MDW", "Chicago Midway International", "Chicago", "US", 41.7868, -87.7522
+    ),
     "ATL": AirportLocation("ATL", "Hartsfield-Jackson Atlanta", "Atlanta", "US", 33.6407, -84.4277),
-    "DFW": AirportLocation("DFW", "Dallas/Fort Worth International", "Dallas", "US", 32.8998, -97.0403),
-    "DEN": AirportLocation("DEN", "Denver International Airport", "Denver", "US", 39.8561, -104.6737),
-    "SFO": AirportLocation("SFO", "San Francisco International", "San Francisco", "US", 37.6213, -122.3790),
-    "SEA": AirportLocation("SEA", "Seattle-Tacoma International", "Seattle", "US", 47.4502, -122.3088),
+    "DFW": AirportLocation(
+        "DFW", "Dallas/Fort Worth International", "Dallas", "US", 32.8998, -97.0403
+    ),
+    "DEN": AirportLocation(
+        "DEN", "Denver International Airport", "Denver", "US", 39.8561, -104.6737
+    ),
+    "SFO": AirportLocation(
+        "SFO", "San Francisco International", "San Francisco", "US", 37.6213, -122.3790
+    ),
+    "SEA": AirportLocation(
+        "SEA", "Seattle-Tacoma International", "Seattle", "US", 47.4502, -122.3088
+    ),
     "BOS": AirportLocation("BOS", "Logan International Airport", "Boston", "US", 42.3656, -71.0096),
     "MIA": AirportLocation("MIA", "Miami International Airport", "Miami", "US", 25.7959, -80.2870),
-    "MCO": AirportLocation("MCO", "Orlando International Airport", "Orlando", "US", 28.4312, -81.3081),
-    "LAS": AirportLocation("LAS", "Harry Reid International Airport", "Las Vegas", "US", 36.0840, -115.1537),
-    "PHX": AirportLocation("PHX", "Phoenix Sky Harbor International", "Phoenix", "US", 33.4373, -112.0078),
-    "IAH": AirportLocation("IAH", "George Bush Intercontinental", "Houston", "US", 29.9902, -95.3368),
-    "CLT": AirportLocation("CLT", "Charlotte Douglas International", "Charlotte", "US", 35.2144, -80.9473),
-    "MSP": AirportLocation("MSP", "Minneapolis-Saint Paul International", "Minneapolis", "US", 44.8848, -93.2223),
-    "DTW": AirportLocation("DTW", "Detroit Metropolitan Airport", "Detroit", "US", 42.2162, -83.3554),
-    "PHL": AirportLocation("PHL", "Philadelphia International Airport", "Philadelphia", "US", 39.8729, -75.2437),
-    "BWI": AirportLocation("BWI", "Baltimore/Washington International", "Baltimore", "US", 39.1754, -76.6683),
-    "IAD": AirportLocation("IAD", "Washington Dulles International", "Washington", "US", 38.9531, -77.4565),
-    "DCA": AirportLocation("DCA", "Ronald Reagan Washington National", "Washington", "US", 38.8512, -77.0402),
+    "MCO": AirportLocation(
+        "MCO", "Orlando International Airport", "Orlando", "US", 28.4312, -81.3081
+    ),
+    "LAS": AirportLocation(
+        "LAS", "Harry Reid International Airport", "Las Vegas", "US", 36.0840, -115.1537
+    ),
+    "PHX": AirportLocation(
+        "PHX", "Phoenix Sky Harbor International", "Phoenix", "US", 33.4373, -112.0078
+    ),
+    "IAH": AirportLocation(
+        "IAH", "George Bush Intercontinental", "Houston", "US", 29.9902, -95.3368
+    ),
+    "CLT": AirportLocation(
+        "CLT", "Charlotte Douglas International", "Charlotte", "US", 35.2144, -80.9473
+    ),
+    "MSP": AirportLocation(
+        "MSP", "Minneapolis-Saint Paul International", "Minneapolis", "US", 44.8848, -93.2223
+    ),
+    "DTW": AirportLocation(
+        "DTW", "Detroit Metropolitan Airport", "Detroit", "US", 42.2162, -83.3554
+    ),
+    "PHL": AirportLocation(
+        "PHL", "Philadelphia International Airport", "Philadelphia", "US", 39.8729, -75.2437
+    ),
+    "BWI": AirportLocation(
+        "BWI", "Baltimore/Washington International", "Baltimore", "US", 39.1754, -76.6683
+    ),
+    "IAD": AirportLocation(
+        "IAD", "Washington Dulles International", "Washington", "US", 38.9531, -77.4565
+    ),
+    "DCA": AirportLocation(
+        "DCA", "Ronald Reagan Washington National", "Washington", "US", 38.8512, -77.0402
+    ),
     "SAN": AirportLocation("SAN", "San Diego International", "San Diego", "US", 32.7338, -117.1933),
     "TPA": AirportLocation("TPA", "Tampa International Airport", "Tampa", "US", 27.9755, -82.5332),
-    "HNL": AirportLocation("HNL", "Daniel K. Inouye International", "Honolulu", "US", 21.3187, -157.9225),
-
+    "HNL": AirportLocation(
+        "HNL", "Daniel K. Inouye International", "Honolulu", "US", 21.3187, -157.9225
+    ),
     # Other Global Hubs (for international route distance and scope checks)
     "DXB": AirportLocation("DXB", "Dubai International Airport", "Dubai", "AE", 25.2532, 55.3657),
     "DOH": AirportLocation("DOH", "Hamad International Airport", "Doha", "QA", 25.2731, 51.6081),
     "SIN": AirportLocation("SIN", "Singapore Changi Airport", "Singapore", "SG", 1.3644, 103.9915),
     "HND": AirportLocation("HND", "Tokyo Haneda Airport", "Tokyo", "JP", 35.5494, 139.7798),
     "NRT": AirportLocation("NRT", "Narita International Airport", "Tokyo", "JP", 35.7720, 140.3929),
-    "HKG": AirportLocation("HKG", "Hong Kong International Airport", "Hong Kong", "HK", 22.3080, 113.9185),
-    "SYD": AirportLocation("SYD", "Sydney Kingsford Smith Airport", "Sydney", "AU", -33.9399, 151.1753),
-    "YYZ": AirportLocation("YYZ", "Toronto Pearson International", "Toronto", "CA", 43.6777, -79.6248),
+    "HKG": AirportLocation(
+        "HKG", "Hong Kong International Airport", "Hong Kong", "HK", 22.3080, 113.9185
+    ),
+    "SYD": AirportLocation(
+        "SYD", "Sydney Kingsford Smith Airport", "Sydney", "AU", -33.9399, 151.1753
+    ),
+    "YYZ": AirportLocation(
+        "YYZ", "Toronto Pearson International", "Toronto", "CA", 43.6777, -79.6248
+    ),
     "DEL": AirportLocation("DEL", "Indira Gandhi International", "Delhi", "IN", 28.5562, 77.1000),
     "BOM": AirportLocation("BOM", "Chhatrapati Shivaji Maharaj", "Mumbai", "IN", 19.0896, 72.8656),
-    "GRU": AirportLocation("GRU", "São Paulo/Guarulhos International", "Sao Paulo", "BR", -23.4356, -46.4731),
-    "EZE": AirportLocation("EZE", "Ministro Pistarini International", "Buenos Aires", "AR", -34.8222, -58.5358),
-    "JNB": AirportLocation("JNB", "O. R. Tambo International", "Johannesburg", "ZA", -26.1367, 28.2411),
+    "GRU": AirportLocation(
+        "GRU", "São Paulo/Guarulhos International", "Sao Paulo", "BR", -23.4356, -46.4731
+    ),
+    "EZE": AirportLocation(
+        "EZE", "Ministro Pistarini International", "Buenos Aires", "AR", -34.8222, -58.5358
+    ),
+    "JNB": AirportLocation(
+        "JNB", "O. R. Tambo International", "Johannesburg", "ZA", -26.1367, 28.2411
+    ),
     "IST": AirportLocation("IST", "Istanbul Airport", "Istanbul", "TR", 41.2753, 28.7519),
 }
 
 
 # ── Distance Calculation ──────────────────────────────────────────────────
+
 
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
@@ -206,29 +293,24 @@ def calculate_flight_distance_km(departure_iata: str, arrival_iata: str) -> floa
     """
     Calculate great-circle flight distance in kilometers between two IATA airports.
 
-    If either airport is not in our embedded database, returns a reasonable
-    fallback estimate (2,000 km) and logs a warning in comments.
+    Unknown airports raise ValueError: invented distance would invent compensation.
 
     LEARN: In production, you would connect to a full airport database or GIS service
     (like OpenFlights or OurAirports). For this learning project, we provide a rich
-    curated dataset of major airports and graceful fallback defaults.
+    curated dataset of major airports and an explicit unsupported-data outcome.
     """
     dep = get_airport(departure_iata)
     arr = get_airport(arrival_iata)
 
     if dep and arr:
-        return haversine_distance_km(
-            dep.latitude, dep.longitude, arr.latitude, arr.longitude
-        )
+        return haversine_distance_km(dep.latitude, dep.longitude, arr.latitude, arr.longitude)
 
-    # Fallback distance if airport coordinates are unlisted
-    # NOTE: 2000 km falls into the medium band (1500–3500 km)
-    return 2000.0
+    raise ValueError(f"Missing airport coordinates: {departure_iata}, {arrival_iata}")
 
 
 def is_eu_airport(iata: str) -> bool:
     """
-    Check whether an airport code belongs to the EU/EEA, Switzerland, or UK.
+    Check whether an airport code belongs to the EU/EEA or Switzerland.
     Returns False if unlisted or outside European jurisdiction.
     """
     airport = get_airport(iata)

@@ -33,13 +33,13 @@ from copilot.rules.airports import (
     is_eu_airport,
     is_intra_eu_flight,
 )
+from copilot.rules.checks import check_airports, unresolved
 from copilot.schemas.flight import (
     CompensationResult,
     DisruptionType,
     FlightDisruption,
     Region,
 )
-
 
 # ── EU261 Statutory Constants ─────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ DISTANCE_LONG_KM = 3500.0
 # Article 7(1) Base compensation amounts (EUR)
 COMPENSATION_SHORT_EUR = 250.0  # Art. 7(1)(a): <= 1,500 km
 COMPENSATION_MEDIUM_EUR = 400.0  # Art. 7(1)(b): 1,500-3,500 km OR intra-EU > 1,500 km
-COMPENSATION_LONG_EUR = 600.0    # Art. 7(1)(c): > 3,500 km non-intra-EU
+COMPENSATION_LONG_EUR = 600.0  # Art. 7(1)(c): > 3,500 km non-intra-EU
 
 # Sturgeon ruling delay threshold (hours / minutes)
 DELAY_THRESHOLD_HOURS = 3
@@ -79,7 +79,7 @@ EXEMPT_EXTRAORDINARY_PATTERNS = [
     r"snow",
     r"storm",
     r"hurricane",
-    r"volcan",
+    r"volcan(?:ic|o)",
     r"ash",
     r"air traffic control",
     r"atc",
@@ -98,14 +98,15 @@ NON_EXEMPT_OPERATIONAL_PATTERNS = [
     r"mechanical",
     r"aircraft maintenance",
     r"engine",
-    r"part",
+    r"parts?",
+    r"software",
     r"sensor",
-    r"crew sick",
+    r"crew sick(?:ness)?",
     r"crew hour",
     r"crew timeout",
-    r"crew short",
-    r"staff short",
-    r"pilot sick",
+    r"crew short(?:age|ages)?",
+    r"staff short(?:age|ages)?",
+    r"pilot sick(?:ness)?",
     r"internal strike",
     r"airline strike",
     r"cabin crew strike",
@@ -127,31 +128,38 @@ def classify_extraordinary_circumstances(reason: Optional[str]) -> Tuple[Optiona
         return None, "No disruption reason provided by airline."
 
     clean_reason = reason.strip().lower()
-
-    # Check non-exempt patterns first (technical defects, staff shortages, internal strikes)
-    for pattern in NON_EXEMPT_OPERATIONAL_PATTERNS:
-        if re.search(pattern, clean_reason):
-            return False, (
-                f"The stated reason ('{reason}') appears to be an operational or technical issue. "
-                f"Under CJEU Case C-549/07 (Wallentin-Hermann) and Case C-257/14 (van der Lans), "
-                f"technical breakdowns and staffing shortages are inherent in the normal activity "
-                f"of the air carrier and do NOT qualify as extraordinary circumstances."
-            )
-
-    # Check genuine extraordinary patterns (weather, ATC, security)
-    for pattern in EXEMPT_EXTRAORDINARY_PATTERNS:
-        if re.search(pattern, clean_reason):
-            return True, (
-                f"The stated reason ('{reason}') indicates an external event beyond the airline's control. "
-                f"Under EU261 Article 5(3) and Recital 14, adverse meteorological conditions, "
-                f"air traffic management directives, and third-party security events generally "
-                f"constitute extraordinary circumstances exempting the carrier from compensation."
-            )
-
-    return None, f"Stated reason ('{reason}') requires further factual investigation."
+    # LEARN: Substring matching confuses "software" with "war" and "departure"
+    # with "part". Boundaries prevent that, while negation and mixed explanations
+    # are deliberately sent for review rather than pretending this is language understanding.
+    if re.search(r"\b(no|not|never|without)\b", clean_reason):
+        return None, "A negated explanation needs factual review."
+    operational = any(
+        re.search(r"\b(?:" + pattern + r")\b", clean_reason)
+        for pattern in NON_EXEMPT_OPERATIONAL_PATTERNS
+    )
+    external = any(
+        re.search(r"\b(?:" + pattern + r")\b", clean_reason)
+        for pattern in EXEMPT_EXTRAORDINARY_PATTERNS
+    )
+    if operational and external:
+        return None, "Mixed operational and external causes need factual review."
+    if operational:
+        return (
+            False,
+            "The stated operational cause is generally not exempt "
+            "(Wallentin-Hermann, C-549/07); the precise facts still matter.",
+        )
+    if external:
+        return (
+            True,
+            "A possible extraordinary event was reported. The airline must prove "
+            "causation and that all reasonable measures could not avoid the disruption.",
+        )
+    return None, "The stated reason needs factual review."
 
 
 # ── Scope Assessment (Article 3) ──────────────────────────────────────────
+
 
 def check_eu261_scope(disruption: FlightDisruption) -> Tuple[bool, str]:
     """
@@ -196,10 +204,10 @@ def check_eu261_scope(disruption: FlightDisruption) -> Tuple[bool, str]:
                 f"operated by third-country carriers."
             )
         else:
-            # Carrier nationality unspecified; flag probable coverage if EU airport destination
-            return True, (
-                f"Flight arrives in the EU ({arr}) from a third country ({dep}). Under Article 3(1)(b), "
-                f"EU261 applies if the operating airline is a Community (EU) carrier."
+            # Unknown nationality does not establish coverage.
+            return False, (
+                f"Flight arrives in the EU ({arr}) from {dep}. Under Article 3(1)(b), "
+                "EU261 applies if the operating airline is a Community (EU) carrier."
             )
 
     # Neither departure nor arrival in EU
@@ -210,6 +218,7 @@ def check_eu261_scope(disruption: FlightDisruption) -> Tuple[bool, str]:
 
 
 # ── Distance & Amount Calculation (Article 7) ─────────────────────────────
+
 
 def calculate_eu261_compensation_amount(
     departure_iata: str, arrival_iata: str, delay_minutes: Optional[int] = None
@@ -252,7 +261,7 @@ def calculate_eu261_compensation_amount(
         return (
             COMPENSATION_MEDIUM_EUR,
             f"Flight distance is {distance_km:,.0f} km between EU airports. "
-            f"All intra-Community flights exceeding 1,500 km are capped at €400 pursuant to Article 7(1)(b).",
+            "Intra-Community flights over 1,500 km are capped at €400 under Article 7(1)(b).",
             rules,
         )
 
@@ -268,14 +277,17 @@ def calculate_eu261_compensation_amount(
 
     # Band C: Extra-EU > 3,500 km
     # Check 50% reduction clause for delays between 3h and 4h (Sturgeon para 63 & Art 7(2)(c))
-    if delay_minutes is not None and DELAY_THRESHOLD_MINUTES <= delay_minutes < LONG_HAUL_REDUCTION_DELAY_MINUTES:
+    if (
+        delay_minutes is not None
+        and DELAY_THRESHOLD_MINUTES <= delay_minutes < LONG_HAUL_REDUCTION_DELAY_MINUTES
+    ):
         rules.append("Regulation (EC) No 261/2004 Art. 7(1)(c) (> 3500 km)")
         rules.append("Regulation (EC) No 261/2004 Art. 7(2)(c) (50% reduction for delay < 4 hours)")
         return (
             300.0,
             f"Flight distance is {distance_km:,.0f} km (> 3,500 km, extra-Community). "
             f"Base compensation is €600 under Article 7(1)(c), but reduced by 50% to €300 "
-            f"under Article 7(2)(c) because final arrival delay was under 4 hours ({delay_minutes} mins).",
+            f"under Article 7(2)(c): final arrival delay was under 4 hours ({delay_minutes} mins).",
             rules,
         )
 
@@ -290,214 +302,160 @@ def calculate_eu261_compensation_amount(
 
 # ── Main EU261 Evaluation Engine ──────────────────────────────────────────
 
-def evaluate_eu261(disruption: FlightDisruption) -> CompensationResult:
-    """
-    Evaluate passenger compensation eligibility under EU Regulation (EC) No 261/2004.
 
-    Evaluates:
-      1. Scope (Article 3)
-      2. Disruption specifics:
-         - DELAY: Sturgeon ruling (3+ hours at final destination)
-         - CANCELLATION: Notice periods (<7 days, 7-14 days, >=14 days under Art. 5(1)(c))
-         - DENIED BOARDING: Involuntary vs voluntary under Art. 4
-      3. Extraordinary circumstances exemption (Art. 5(3))
-      4. Statutory compensation amount calculation (Art. 7)
+def evaluate_eu261(disruption: FlightDisruption) -> CompensationResult:
+    """Require scope and remedy facts before applying the deterministic EU amount bands.
+
+    Sources: EC 261/2004 Articles 3, 4, 5 and 7, plus the Commission guidance:
+    https://europa.eu/youreurope/citizens/travel/passenger-rights/air/index_en.htm
+    Weather keywords identify a review question, not a proven legal exemption.
     """
-    # 1. Scope check
+    if pending := check_airports(disruption, Region.EU):
+        return pending
+    dep, arr = disruption.flight.departure_airport, disruption.flight.arrival_airport
+    if not is_eu_airport(dep) and is_eu_airport(arr) and disruption.is_eu_carrier is None:
+        return unresolved(
+            Region.EU,
+            "Inbound EU scope depends on the operating carrier.",
+            ["Is the operating airline an EU/EEA carrier?"],
+        )
     in_scope, scope_reason = check_eu261_scope(disruption)
     if not in_scope:
         return CompensationResult(
             eligible=False,
             regulation=Region.EU,
-            compensation_amount=None,
-            compensation_currency=None,
             reasoning=scope_reason,
             applicable_rules=["Regulation (EC) No 261/2004 Article 3"],
-            extraordinary_circumstances=None,
         )
-
-    # 2. Check extraordinary circumstances (applies to delay & cancellation)
-    is_extraordinary, extra_note = classify_extraordinary_circumstances(disruption.airline_reason)
-    if is_extraordinary is True and disruption.disruption_type in (
-        DisruptionType.DELAY,
-        DisruptionType.CANCELLATION,
-    ):
-        return CompensationResult(
-            eligible=False,
-            regulation=Region.EU,
-            compensation_amount=None,
-            compensation_currency=None,
-            reasoning=(
-                f"{scope_reason}\n\n"
-                f"However, compensation is NOT due under Article 5(3) because the disruption was "
-                f"caused by extraordinary circumstances: {extra_note}"
-            ),
-            applicable_rules=[
-                "Regulation (EC) No 261/2004 Article 3",
-                "Regulation (EC) No 261/2004 Article 5(3)",
-            ],
-            extraordinary_circumstances=True,
-        )
-
-    dep = disruption.flight.departure_airport
-    arr = disruption.flight.arrival_airport
-
-    # 3. Disruption type evaluation
-
-    # ── CASE A: DELAY ─────────────────────────────────────────────────────
-    if disruption.disruption_type == DisruptionType.DELAY:
-        delay_mins = disruption.arrival_delay_minutes
-
-        if delay_mins is None:
+    kind = disruption.disruption_type
+    if kind == DisruptionType.DELAY:
+        if disruption.arrival_delay_minutes is None:
+            return unresolved(
+                Region.EU,
+                "Arrival delay is needed for assessment.",
+                ["What was the arrival delay at the final destination in minutes?"],
+            )
+        if disruption.arrival_delay_minutes < DELAY_THRESHOLD_MINUTES:
             return CompensationResult(
                 eligible=False,
                 regulation=Region.EU,
-                reasoning=(
-                    f"{scope_reason}\n\n"
-                    f"To evaluate compensation for delay, the exact arrival delay at final destination "
-                    f"is required. Under CJEU Sturgeon jurisprudence, delay must be 3 or more hours (180+ mins)."
-                ),
-                applicable_rules=["CJEU Joined Cases C-402/07 and C-432/07 (Sturgeon)"],
+                reasoning="Arrival delay is below 180 minutes. Care rights may still apply.",
+                applicable_rules=["CJEU C-402/07 and C-432/07 (Sturgeon)", "EU261 Article 6"],
             )
-
-        if delay_mins < DELAY_THRESHOLD_MINUTES:
+    elif kind == DisruptionType.CANCELLATION:
+        notice = disruption.cancellation_notice_days
+        if notice is None:
+            return unresolved(
+                Region.EU,
+                "Cancellation notice is unknown.",
+                ["How many days before departure were you told of the cancellation?"],
+            )
+        if notice >= 14:
             return CompensationResult(
                 eligible=False,
                 regulation=Region.EU,
-                compensation_amount=None,
-                compensation_currency=None,
-                reasoning=(
-                    f"{scope_reason}\n\n"
-                    f"The flight arrived {delay_mins} minutes late. Under CJEU Sturgeon v Condor (C-402/07), "
-                    f"passengers are only entitled to Article 7 compensation if the delay at final destination "
-                    f"is 3 hours (180 minutes) or more. For delays of 2+ hours, airlines must offer right to care "
-                    f"(meals/refreshments under Article 9), but no cash compensation is owed."
-                ),
-                applicable_rules=[
-                    "Regulation (EC) No 261/2004 Article 6",
-                    "CJEU Joined Cases C-402/07 and C-432/07 (Sturgeon v Condor)",
-                ],
-                extraordinary_circumstances=is_extraordinary,
+                reasoning="At least 14 days notice: no Article 7 award; refund/rerouting remains.",
+                applicable_rules=["EU261 Article 5(1)(c)(i)", "EU261 Article 8"],
             )
-
-        # Delay >= 3 hours -> Entitled to Art 7 compensation!
-        amount, dist_reason, rules = calculate_eu261_compensation_amount(dep, arr, delay_mins)
-        rules.insert(0, "CJEU Joined Cases C-402/07 and C-432/07 (Sturgeon v Condor)")
-        if is_extraordinary is False:
-            rules.append("CJEU Case C-549/07 (Wallentin-Hermann: technical faults not exempt)")
-
-        return CompensationResult(
-            eligible=True,
-            regulation=Region.EU,
-            compensation_amount=amount,
-            compensation_currency="EUR",
-            reasoning=(
-                f"{scope_reason}\n\n"
-                f"ELIGIBLE FOR COMPENSATION: The flight arrived {delay_mins} minutes late (>= 3 hours). "
-                f"Under the landmark CJEU Sturgeon v Condor ruling, passengers with 3+ hour arrival delays "
-                f"have the right to Article 7 compensation.\n\n"
-                f"{dist_reason}\n\n"
-                f"{extra_note}"
-            ),
-            applicable_rules=rules,
-            extraordinary_circumstances=is_extraordinary,
-        )
-
-    # ── CASE B: CANCELLATION ──────────────────────────────────────────────
-    if disruption.disruption_type == DisruptionType.CANCELLATION:
-        notice_days = disruption.cancellation_notice_days
-
-        # Article 5(1)(c)(i): Informed at least 14 days prior
-        if notice_days is not None and notice_days >= 14:
-            return CompensationResult(
-                eligible=False,
-                regulation=Region.EU,
-                compensation_amount=None,
-                compensation_currency=None,
-                reasoning=(
-                    f"{scope_reason}\n\n"
-                    f"The cancellation was announced {notice_days} days in advance. Under Article 5(1)(c)(i), "
-                    f"no compensation is due if passengers are informed of the cancellation at least two weeks (14 days) "
-                    f"before the scheduled departure. Note: You remain entitled to a full ticket refund or rerouting under Article 8."
-                ),
-                applicable_rules=["Regulation (EC) No 261/2004 Article 5(1)(c)(i)"],
-                extraordinary_circumstances=is_extraordinary,
+        if disruption.was_rerouted is None:
+            return unresolved(
+                Region.EU,
+                "Rerouting can change cancellation eligibility.",
+                ["Did the airline offer an alternative flight?"],
             )
-
-        # Cancellation with short notice (< 14 days or notice unknown)
-        amount, dist_reason, rules = calculate_eu261_compensation_amount(dep, arr)
-        rules.insert(0, "Regulation (EC) No 261/2004 Article 5(1)(c)")
-        rules.insert(1, "Regulation (EC) No 261/2004 Article 8 (Right to reimbursement or rerouting)")
-
-        notice_text = (
-            f"The flight was cancelled with {notice_days} days notice (less than 14 days)."
-            if notice_days is not None
-            else "The flight was cancelled with short notice."
-        )
-
-        return CompensationResult(
-            eligible=True,
-            regulation=Region.EU,
-            compensation_amount=amount,
-            compensation_currency="EUR",
-            reasoning=(
-                f"{scope_reason}\n\n"
-                f"ELIGIBLE FOR COMPENSATION: {notice_text} Under Article 5(1)(c), cancellations informed "
-                f"less than 14 days prior require statutory compensation unless the airline proved suitable rerouting "
-                f"or extraordinary circumstances.\n\n"
-                f"{dist_reason}\n\n"
-                f"{extra_note}"
-            ),
-            applicable_rules=rules,
-            extraordinary_circumstances=is_extraordinary,
-        )
-
-    # ── CASE C: DENIED BOARDING ───────────────────────────────────────────
-    if disruption.disruption_type == DisruptionType.DENIED_BOARDING:
-        # Article 4(1): Voluntary surrender
+        if disruption.was_rerouted:
+            advance = disruption.rerouting_departure_advance_minutes
+            planned_delay = disruption.rerouting_arrival_delay_minutes
+            if advance is None or planned_delay is None:
+                return unresolved(
+                    Region.EU,
+                    "The offered alternative's schedule is needed.",
+                    ["How much earlier would it depart and later would it arrive?"],
+                )
+            max_advance, max_delay = (120, 240) if notice >= 7 else (60, 120)
+            # LEARN: Short notice alone is insufficient. Article 5 includes
+            # exceptions for suitable alternatives; its arrival limit is strict.
+            if advance <= max_advance and planned_delay < max_delay:
+                return CompensationResult(
+                    eligible=False,
+                    regulation=Region.EU,
+                    reasoning="The offered schedule meets the cancellation rerouting exception.",
+                    applicable_rules=["EU261 Article 5(1)(c)(ii)-(iii)"],
+                )
+    else:
         if disruption.volunteered_seat is True:
             return CompensationResult(
                 eligible=False,
                 regulation=Region.EU,
-                compensation_amount=None,
-                compensation_currency=None,
-                reasoning=(
-                    f"{scope_reason}\n\n"
-                    f"Under Article 4(1), passengers who voluntarily surrender their reservation do so in exchange "
-                    f"for benefits agreed between the passenger and the airline, plus assistance under Article 8. "
-                    f"Statutory Article 7 fixed compensation applies only to passengers denied boarding against their will (involuntarily)."
-                ),
-                applicable_rules=[
-                    "Regulation (EC) No 261/2004 Article 4(1) (Voluntary surrender)",
-                    "Regulation (EC) No 261/2004 Article 8",
-                ],
-                extraordinary_circumstances=None,
+                reasoning="Voluntary surrender is governed by the agreed benefits.",
+                applicable_rules=["EU261 Article 4(1)"],
+            )
+        questions = []
+        for field, question in [
+            ("volunteered_seat", "Did you voluntarily give up your seat?"),
+            ("met_checkin_requirements", "Did you check in on time with valid travel documents?"),
+            ("denied_due_to_overbooking", "Was boarding denied due to overbooking?"),
+            ("was_rerouted", "Was alternative transportation offered?"),
+        ]:
+            if getattr(disruption, field) is None:
+                questions.append(question)
+        if questions:
+            return unresolved(Region.EU, "Denied-boarding facts are missing.", questions)
+        if not disruption.met_checkin_requirements or not disruption.denied_due_to_overbooking:
+            return unresolved(
+                Region.EU,
+                "This simplified engine handles timely, documented "
+                "oversales cases. Other denied-boarding circumstances need review.",
             )
 
-        # Article 4(3): Involuntary denied boarding (e.g. overbooking)
-        amount, dist_reason, rules = calculate_eu261_compensation_amount(dep, arr)
-        rules.insert(0, "Regulation (EC) No 261/2004 Article 4(3) (Involuntary denied boarding)")
-
-        return CompensationResult(
-            eligible=True,
-            regulation=Region.EU,
-            compensation_amount=amount,
-            compensation_currency="EUR",
-            reasoning=(
-                f"{scope_reason}\n\n"
-                f"ELIGIBLE FOR COMPENSATION: Under Article 4(3), if boarding is denied to passengers against their will, "
-                f"the operating air carrier must immediately compensate them in accordance with Article 7, "
-                f"as well as provide rerouting/refund (Article 8) and care (Article 9).\n\n"
-                f"{dist_reason}"
-            ),
-            applicable_rules=rules,
-            extraordinary_circumstances=False,
+    extraordinary, note = classify_extraordinary_circumstances(disruption.airline_reason)
+    if kind != DisruptionType.DENIED_BOARDING and extraordinary is not False:
+        questions = (
+            ["What reason did the airline give for the disruption?"]
+            if (not disruption.airline_reason)
+            else None
         )
-
-    # Fallback for unrecognized disruption types
+        result = unresolved(
+            Region.EU,
+            f"{scope_reason} {note} EU261 Article 5(3) requires "
+            "evidence, so no automatic exemption or cash award is determined.",
+            questions,
+        )
+        result.extraordinary_circumstances = extraordinary
+        result.applicable_rules = ["EU261 Article 5(3)"]
+        return result
+    if kind != DisruptionType.DELAY and disruption.was_rerouted:
+        if disruption.arrival_delay_minutes is None:
+            return unresolved(
+                Region.EU,
+                "Actual arrival delay is needed for any 50% reduction.",
+                ["What was the actual arrival delay on your alternative flight?"],
+            )
+    amount, explanation, rules = calculate_eu261_compensation_amount(
+        dep,
+        arr,
+        disruption.arrival_delay_minutes if kind == DisruptionType.DELAY else None,
+    )
+    if kind != DisruptionType.DELAY and disruption.was_rerouted:
+        reduction_limit = {250.0: 120, 400.0: 180, 600.0: 240}[amount]
+        if disruption.arrival_delay_minutes <= reduction_limit:
+            amount /= 2
+            explanation += f" Article 7(2) rerouting reduction gives EUR {amount:.0f}."
+            rules.append("EU261 Article 7(2) (50% rerouting reduction)")
+    rules.insert(
+        0,
+        {
+            DisruptionType.DELAY: "CJEU C-402/07 and C-432/07 (Sturgeon)",
+            DisruptionType.CANCELLATION: "EU261 Article 5(1)(c)",
+            DisruptionType.DENIED_BOARDING: "EU261 Article 4(3)",
+        }[kind],
+    )
     return CompensationResult(
-        eligible=False,
+        eligible=True,
         regulation=Region.EU,
-        reasoning=f"Unsupported disruption type: {disruption.disruption_type}",
-        applicable_rules=[],
+        compensation_amount=amount,
+        compensation_currency="EUR",
+        applicable_rules=rules,
+        extraordinary_circumstances=False,
+        reasoning=f"{scope_reason} {explanation} {note} Estimate based on supplied facts.",
     )

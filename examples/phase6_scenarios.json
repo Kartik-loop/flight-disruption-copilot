@@ -1,0 +1,37 @@
+[
+  {
+    "id": "eu_long_haul",
+    "title": "EU long-haul delay, five hours",
+    "request": {"disruption": {"flight": {"airline": "LH", "flight_number": "LH400", "departure_airport": "FRA", "arrival_airport": "JFK", "flight_date": "2025-03-10"}, "disruption_type": "delay", "arrival_delay_minutes": 300, "airline_reason": "Technical fault", "declined_alternative_travel": false}},
+    "expected": {"status": "complete", "eligible": true, "amount": 600, "currency": "EUR", "letter_contains": "EUR 600.00"},
+    "why": "EU departure; route over 3,500 km; 300-minute final-arrival delay; supplied operational cause. The below-four-hour long-haul reduction does not apply."
+  },
+  {
+    "id": "us_refund_only",
+    "title": "US cancellation, refund only",
+    "request": {"disruption": {"flight": {"airline": "UA", "flight_number": "UA100", "departure_airport": "JFK", "arrival_airport": "LAX", "flight_date": "2025-03-10"}, "disruption_type": "cancellation", "airline_reason": "Weather", "declined_alternative_travel": true}},
+    "expected": {"status": "complete", "eligible": false, "amount": null, "refund_eligible": true, "letter_contains": "Please refund my unused ticket"},
+    "why": "The passenger declined travel and credits after cancellation. Refund of unused travel is separate from a fixed cash compensation award; the ticket value is not invented."
+  },
+  {
+    "id": "us_involuntary_boarding",
+    "title": "US involuntary oversales, higher DOT tier",
+    "request": {"disruption": {"flight": {"airline": "UA", "flight_number": "UA100", "departure_airport": "JFK", "arrival_airport": "LAX", "flight_date": "2025-03-10", "scheduled_departure": "2025-03-10T09:30:00"}, "disruption_type": "denied_boarding", "volunteered_seat": false, "denied_due_to_overbooking": true, "met_checkin_requirements": true, "was_rerouted": true, "rerouting_arrival_delay_minutes": 150, "one_way_fare_usd": 300}},
+    "expected": {"status": "complete", "eligible": true, "amount": 1200, "currency": "USD", "letter_contains": "USD 1200.00"},
+    "why": "Alternative planned arrival is 150 minutes later on a domestic flight: 400% of the $300 fare, subject to the $2,150 cap effective January 22, 2025. Other Part 250 exceptions remain a limitation."
+  },
+  {
+    "id": "missing_arrival_delay",
+    "title": "Missing arrival-delay fact",
+    "request": {"disruption": {"flight": {"airline": "LH", "flight_number": "LH1000", "departure_airport": "FRA", "arrival_airport": "CDG", "flight_date": "2025-03-10"}, "disruption_type": "delay", "airline_reason": "Technical fault"}},
+    "expected": {"status": "needs_information", "eligible": null, "amount": null, "question_contains": "arrival delay", "letter_absent": true},
+    "why": "No final-arrival duration was supplied. A follow-up is required before determining a delay award; missing does not mean zero or three hours."
+  },
+  {
+    "id": "exactly_three_hours",
+    "title": "EU boundary: exactly three hours",
+    "request": {"disruption": {"flight": {"airline": "LH", "flight_number": "LH1000", "departure_airport": "FRA", "arrival_airport": "CDG", "flight_date": "2025-03-10"}, "disruption_type": "delay", "arrival_delay_minutes": 180, "airline_reason": "Technical fault"}},
+    "expected": {"status": "complete", "eligible": true, "amount": 250, "currency": "EUR", "letter_contains": "EUR 250.00"},
+    "why": "The arrival-delay threshold is inclusive (at least 180 minutes), and FRA–CDG is below 1,500 km. Exactly three hours qualifies; 179 minutes would not."
+  }
+]
