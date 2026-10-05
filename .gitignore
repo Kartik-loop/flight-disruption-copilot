@@ -32,3 +32,6 @@ Thumbs.db
 
 # ── Jupyter ──────────────────────────────────────────────────────
 .ipynb_checkpoints/
+
+# Streamlit deployment credentials stay outside version control.
+.streamlit/secrets.toml

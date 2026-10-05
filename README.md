@@ -79,7 +79,7 @@ In two terminals, from the project root with the environment activated:
 # Terminal 1: assessment service
 uvicorn copilot.api.main:app --host 127.0.0.1 --port 8000
 # Terminal 2: passenger interface
-streamlit run ui/app.py --server.address 127.0.0.1 --server.port 8501
+COPILOT_API_URL=http://127.0.0.1:8000 streamlit run ui/app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
 Open [the interface](http://127.0.0.1:8501) or [API documentation](http://127.0.0.1:8000/docs).
@@ -99,8 +99,10 @@ assessment. Unknown answers stay unknown. Predictions need a trained model and
 scheduled local departure time; synthetic predictions require explicit opt-in
 and are labelled. Prediction failure does not discard the passenger-rights result.
 
-The UI defaults to `http://127.0.0.1:8000`. To change it, export
-`COPILOT_API_URL` in the UI process environment before launching Streamlit.
+Without `COPILOT_API_URL`, the UI runs the shared workflow in its own process.
+Set `COPILOT_API_URL=http://127.0.0.1:8000` to use the separately running local API,
+or set it to your hosted API URL. An explicitly configured API failure never
+silently switches execution modes.
 This is a local learning demo without authentication or rate limits; public
 hosting is outside this phase. The client makes one request with a 90-second
 timeout and does not automatically retry paid provider calls.
@@ -397,3 +399,27 @@ The pending message reflects a single API request, not simulated agent progress.
 Styles live in `ui/styles.css`; theme settings live in `.streamlit/config.toml`.
 Streamlit 1.41+ is required. After upgrading Streamlit, verify its widget styling
 and rerun `pytest tests/test_ui.py -q` along with a browser check.
+
+
+## Streamlit Community Cloud
+
+Deploy branch `main` with entrypoint `ui/app.py` and Python 3.11 or newer.
+The root `requirements.txt` installs this src-layout package with its `agents`
+and `ui` extras. It takes precedence over Cloud's Poetry handling of `pyproject.toml`.
+The `all` extra lists dependencies explicitly; it does not reference this project itself.
+
+Leave `COPILOT_API_URL` unset for a single-service deployment. Streamlit then runs
+exactly the same graph and rules in-process; Cloud does not automatically start
+FastAPI on port 8000. Structured forms work without an LLM key. If you need text
+extraction, configure the selected provider's key in Cloud Secrets as a root-level
+setting. Never commit `.streamlit/secrets.toml` or `.env`.
+
+The trained model binary is not in GitHub. A fresh cloud deployment will honestly
+show **model unavailable**, not real BTS predictions. Assessments and letters still
+work. To enable predictions, provision the trusted model and matching metadata plus
+the ML dependencies, or connect to a separately deployed API that has them. This
+minimal cloud manifest deliberately does not download training data or retrain on startup.
+
+After pushing dependency changes, Cloud may rebuild automatically. If the previous
+installation failure persists, use **Manage app → Reboot app**. Check the build logs;
+local verification does not prove that a cloud rebuild succeeded.

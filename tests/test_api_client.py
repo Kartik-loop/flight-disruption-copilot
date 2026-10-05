@@ -46,3 +46,36 @@ def test_client_preserves_questions(monkeypatch):
         ),
     )
     assert assess_remote(CopilotRequest(text="Delayed")).questions == ["Which airline?"]
+
+
+@pytest.fixture(autouse=True)
+def configured_api(monkeypatch):
+    """Transport tests opt into HTTP; deployments without a URL use the embedded graph."""
+    monkeypatch.setenv("COPILOT_API_URL", "http://test")
+
+
+def test_embedded_form_without_server(monkeypatch):
+    """A single Streamlit process can evaluate a flight without any localhost API."""
+    import json
+    from pathlib import Path
+
+    pytest.importorskip("langgraph")
+    monkeypatch.delenv("COPILOT_API_URL", raising=False)
+    request = CopilotRequest(disruption=json.loads(Path("examples/eu_delay.json").read_text()))
+    result = assess_remote(request)
+    assert result.status == "complete"
+    assert result.eligibility.compensation_amount == 250
+    assert result.claim_letter
+
+
+def test_embedded_missing_model(monkeypatch, tmp_path):
+    """A cloud checkout without the ignored binary must report unavailable, never real scores."""
+    from copilot.api.client import fetch_model_status
+    from copilot.config import Settings
+
+    monkeypatch.delenv("COPILOT_API_URL", raising=False)
+    monkeypatch.setattr(
+        "copilot.api.status.get_settings", lambda: Settings(_env_file=None, models_dir=tmp_path)
+    )
+    assert fetch_model_status().available is False
+    assert fetch_model_status().data_source == "unknown"

@@ -1,0 +1,3 @@
+# Streamlit Community Cloud prefers this manifest to Poetry's pyproject handling.
+# Install the src-layout project and only the runtime needed for the hosted UI.
+-e .[agents,ui]

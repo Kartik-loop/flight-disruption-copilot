@@ -488,3 +488,24 @@ Self-check:
 
 The source banner, synthetic warning, and legal disclaimer remain visible.
 This is not legal advice.
+
+
+## Deployment repair — Community Cloud
+
+Cloud selected Poetry for `pyproject.toml` and rejected the self-referencing `all`
+extra. It now contains an explicit union, covered by a packaging test. The root
+`requirements.txt` selects a pip-compatible editable installation of the package
+and the runtime extras needed for Streamlit.
+
+A second deployment boundary matters: localhost means the cloud container, not
+the developer's laptop. Without `COPILOT_API_URL`, the UI runs the same graph
+in-process. With an explicit URL, it uses HTTP and does not silently fall back.
+A checkout without the ignored model binary reports unavailable, preserving
+rules assessments without falsely advertising prediction readiness.
+
+Self-check:
+1. **Why install the project itself?** The `src/` package must be importable from `ui/app.py`.
+2. **Why not start a background API automatically?** A shared in-process graph avoids
+   port, lifecycle and process-management problems on a single-service host.
+3. **Does committed metadata prove a model is available?** No. A matching trusted
+   binary is required; metadata alone cannot produce predictions.
